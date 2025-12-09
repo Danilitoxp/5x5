@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Selection - GamersClub Style</title>
+  <link rel="stylesheet" href="index.css">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Roboto:wght@400;500;700&display=swap"
+    rel="stylesheet">
+  <script src="config.js"></script>
+</head>
+
+<body>
+
+  <!-- Start Screen -->
+  <div id="start-screen">
+    <h1>GAIOLA VALORANT</h1>
+    <button id="init-btn" onclick="initApp()">COMEÇAR 5x5</button>
+  </div>
+
+  <div class="app-container" style="display: none;">
+    <!-- Left Sidebar: Team A -->
+    <aside class="sidebar team-a-sidebar">
+      <div class="team-header">
+        <div class="team-logo">A</div>
+        <div class="team-info">
+          <h2>Team A</h2>
+          <span class="status">Picking...</span>
+        </div>
+      </div>
+      <div class="timer" id="timer-a">00:30</div>
+
+      <div class="slots-container" id="team-a-list">
+        <!-- Slots will be filled here -->
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+      </div>
+    </aside>
+
+    <!-- Center Stage -->
+    <main class="center-stage">
+      <header class="main-header">
+        <div class="logo">GAIOLA</div>
+        <div class="match-info">VALORANT</div>
+      </header>
+
+      <div class="step-indicator">
+        <span class="step active">ESCOLHA DE TIMES</span>
+        <span class="separator">→</span>
+        <span class="step">VETO DE MAPAS</span>
+        <span class="separator">→</span>
+        <span class="step">JOGAR</span>
+      </div>
+
+      <div class="instruction">
+        Aguarde enquanto os capitães dos times escolhem os jogadores.
+      </div>
+
+      <div class="players-grid" id="user-list">
+        <!-- Player Cards will be injected here -->
+      </div>
+
+      <button id="start-btn" onclick="startGame()" style="display: none;">START GAME</button>
+    </main>
+
+    <!-- Right Sidebar: Team B -->
+    <aside class="sidebar team-b-sidebar">
+      <div class="team-header">
+        <div class="team-info" style="text-align: right;">
+          <h2>Team B</h2>
+          <span class="status">Waiting...</span>
+        </div>
+        <div class="team-logo">B</div>
+      </div>
+      <div class="timer" id="timer-b">00:30</div>
+
+      <div class="slots-container" id="team-b-list">
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+        <div class="slot empty"><span>Aguardando jogador...</span></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Map Selection Overlay (Hidden by default) -->
+  <div id="map-selection" class="overlay">
+    <div class="overlay-content">
+      <h1>Map Selection</h1>
+      <ul class="map-list">
+        <li onclick="vetoMap(this)">Abyss</li>
+        <li onclick="vetoMap(this)">Bind</li>
+        <li onclick="vetoMap(this)">Corrode</li>
+        <li onclick="vetoMap(this)">Haven</li>
+        <li onclick="vetoMap(this)">Pearl</li>
+        <li onclick="vetoMap(this)">Split</li>
+        <li onclick="vetoMap(this)">Sunset</li>
+        <li onclick="vetoMap(this)">Ascent</li>
+        <li onclick="vetoMap(this)">Breeze</li>
+        <li onclick="vetoMap(this)">Fracture</li>
+        <li onclick="vetoMap(this)">Icebox</li>
+        <li onclick="vetoMap(this)">Lotus</li>
+      </ul>
+      <p id="selected-map"></p>
+    </div>
+  </div>
+
+  <script>
+    let teamA = [];
+    let teamB = [];
+    let turn = 'A';
+    let picksLeft = 1; // First turn has 1 pick
+    let timeA = 30;
+    let timeB = 30;
+    let timerAInterval;
+    let timerBInterval;
+    let fetchedUsers = [];
+    const MAX_PLAYERS = 5;
+
+    const timerADiv = document.getElementById('timer-a');
+    const timerBDiv = document.getElementById('timer-b');
+
+    function startTimers() {
+      clearInterval(timerAInterval);
+      clearInterval(timerBInterval);
+
+      timerAInterval = setInterval(() => {
+        if (turn === 'A' && timeA > 0) {
+          timeA--;
+          timerADiv.innerText = `00:${timeA < 10 ? '0' + timeA : timeA}`;
+          if (timeA === 0) switchTurn();
+        }
+      }, 1000);
+
+      timerBInterval = setInterval(() => {
+        if (turn === 'B' && timeB > 0) {
+          timeB--;
+          timerBDiv.innerText = `00:${timeB < 10 ? '0' + timeB : timeB}`;
+          if (timeB === 0) switchTurn();
+        }
+      }, 1000);
+
+      updateTurnVisuals();
+    }
+
+    function switchTurn() {
+      turn = turn === 'A' ? 'B' : 'A';
+
+      // Reset timers
+      timeA = 30;
+      timeB = 30;
+      timerADiv.innerText = "00:30";
+      timerBDiv.innerText = "00:30";
+
+      // Calculate picks for the next turn
+      const nextTeamArr = turn === 'A' ? teamA : teamB;
+      const slotsRemaining = MAX_PLAYERS - nextTeamArr.length;
+      picksLeft = Math.min(2, slotsRemaining);
+
+      updateTurnVisuals();
+    }
+
+    function updateTurnVisuals() {
+      const sidebarA = document.querySelector('.team-a-sidebar');
+      const sidebarB = document.querySelector('.team-b-sidebar');
+      const statusA = sidebarA.querySelector('.status');
+      const statusB = sidebarB.querySelector('.status');
+
+      if (turn === 'A') {
+        sidebarA.classList.add('active-turn');
+        sidebarB.classList.remove('active-turn');
+        statusA.innerText = `Escolhendo...`;
+        statusB.innerText = 'Aguardando...';
+      } else {
+        sidebarA.classList.remove('active-turn');
+        sidebarB.classList.add('active-turn');
+        statusA.innerText = 'Escolhendo...';
+        statusB.innerText = 'Escolhendo...';
+      }
+    }
+
+    let captainsNotified = false;
+
+    async function fetchUsers() {
+      try {
+        const response = await fetch(`${CONFIG.API_URL}/api/users`);
+        const users = await response.json();
+        fetchedUsers = users;
+
+        // Auto-select captains if teams are empty
+        if (teamA.length === 0 && teamB.length === 0 && fetchedUsers.length > 0) {
+          // Shuffle users for random captain selection
+          fetchedUsers.sort(() => Math.random() - 0.5);
+
+          const GUILD_ID = '994070757053309018';
+          const TEAM_A_CHANNEL = '1447412931523379293';
+          const TEAM_B_CHANNEL = '1447412979741233252';
+          const captainAssignments = [];
+
+          // Captain A
+          if (fetchedUsers[0]) {
+            teamA.push(fetchedUsers[0]);
+            updateSidebarSlots('team-a-list', teamA);
+            document.querySelector('.team-a-sidebar .team-info h2').innerText = `TEAM ${fetchedUsers[0].name.toUpperCase()}`;
+            captainAssignments.push({ userId: fetchedUsers[0].userId, channelId: TEAM_A_CHANNEL });
+          }
+
+          // Captain B
+          if (fetchedUsers[1]) {
+            teamB.push(fetchedUsers[1]);
+            updateSidebarSlots('team-b-list', teamB);
+            document.querySelector('.team-b-sidebar .team-info h2').innerText = `TEAM ${fetchedUsers[1].name.toUpperCase()}`;
+            captainAssignments.push({ userId: fetchedUsers[1].userId, channelId: TEAM_B_CHANNEL });
+          }
+
+          if (captainAssignments.length > 0) {
+            await movePlayers(captainAssignments);
+
+            // Notify captains (send whatever captains were picked)
+            const selectedCaptains = [];
+            if (teamA.length > 0) selectedCaptains.push(teamA[0]);
+            if (teamB.length > 0) selectedCaptains.push(teamB[0]);
+
+            if (!captainsNotified && selectedCaptains.length > 0) {
+              await notifyCaptains(selectedCaptains);
+              captainsNotified = true;
+            }
+          }
+        }
+
+        renderUserList();
+      } catch (error) {
+        console.error('Error fetching users:', error);
+      }
+    }
+
+    async function notifyCaptains(captains) {
+      try {
+        console.log('Notifying captains:', captains);
+        // Envia para a nova rota /notify-leaders
+        await fetch(`${CONFIG.API_URL}/notify-leaders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            // Envia o link atual da página para o bot
+            link: window.location.href,
+            // Envia a lista de líderes
+            leaders: captains.map(c => ({ userId: c.userId }))
+          })
+        });
+        console.log('Captains notified via Discord DM');
+      } catch (e) {
+        console.error('Error notifying captains:', e);
+      }
+    }
+
+    async function movePlayers(assignments) {
+      const GUILD_ID = '994070757053309018';
+      try {
+        console.log('Moving players...', assignments);
+        const response = await fetch(`${CONFIG.API_URL}/move-users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ guildId: GUILD_ID, assignments })
+        });
+        const result = await response.json();
+        if (result.ok) {
+          console.log('Move success:', result);
+          // Check for individual failures
+          const failures = result.results.filter(r => !r.ok && r.reason !== 'already_in_channel');
+          if (failures.length > 0) {
+            console.warn('Some moves failed:', failures);
+            // alert(`Atenção: Alguns jogadores não puderam ser movidos.\nMotivo: ${failures[0].reason}\n\nVerifique se o bot tem permissão de "Mover Membros" no Discord.`);
+          }
+        } else {
+          console.warn('Move partial/fail:', result);
+          alert('Erro ao mover jogadores. Verifique o console do servidor.');
+        }
+      } catch (err) {
+        console.error('Error moving players:', err);
+      }
+    }
+
+    function renderUserList() {
+      const userList = document.getElementById('user-list');
+      userList.innerHTML = '';
+
+      fetchedUsers.forEach(user => {
+        const isInTeamA = teamA.some(u => u.name === user.name);
+        const isInTeamB = teamB.some(u => u.name === user.name);
+
+        if (!isInTeamA && !isInTeamB) {
+          const card = document.createElement('div');
+          card.className = 'player-card';
+          card.onclick = () => selectUser(user);
+          card.innerHTML = `
+          <div class="card-inner">
+            <div class="avatar-container">
+              <img src="${user.avatarUrl}" alt="${user.name}">
+              <div class="status-indicator"></div>
+            </div>
+            <div class="player-name">${user.name}</div>
+            <div class="player-stats">
+              <span>🏆 8</span>
+              <span>⭐ 1.08</span>
+            </div>
+            <button class="pick-btn">ESCOLHER JOGADOR</button>
+          </div>
+        `;
+          userList.appendChild(card);
+        }
+      });
+    }
+
+    function selectUser(user) {
+      const TEAM_A_CHANNEL = '1447412931523379293';
+      const TEAM_B_CHANNEL = '1447412979741233252';
+
+      const currentTeamArr = turn === 'A' ? teamA : teamB;
+      const currentChannel = turn === 'A' ? TEAM_A_CHANNEL : TEAM_B_CHANNEL;
+      const currentListId = turn === 'A' ? 'team-a-list' : 'team-b-list';
+
+      if (currentTeamArr.length >= MAX_PLAYERS) return;
+
+      // Add user
+      currentTeamArr.push(user);
+      updateSidebarSlots(currentListId, currentTeamArr);
+      movePlayers([{ userId: user.userId, channelId: currentChannel }]);
+
+      // Decrement picks
+      picksLeft--;
+
+      // Check if turn ends
+      if (picksLeft <= 0 || currentTeamArr.length >= MAX_PLAYERS) {
+        switchTurn();
+      } else {
+        // Update visuals to show decremented picksLeft
+        updateTurnVisuals();
+      }
+
+      renderUserList();
+
+      if (teamA.length === MAX_PLAYERS && teamB.length === MAX_PLAYERS) {
+        clearInterval(timerAInterval);
+        clearInterval(timerBInterval);
+        document.getElementById('start-btn').style.display = 'block';
+      }
+    }
+
+    function updateSidebarSlots(listId, teamArray) {
+      const container = document.getElementById(listId);
+      const slots = container.getElementsByClassName('slot');
+
+      for (let i = 0; i < MAX_PLAYERS; i++) {
+        const slot = slots[i];
+        if (teamArray[i]) {
+          const u = teamArray[i];
+          const isCaptain = i === 0;
+          slot.className = 'slot filled';
+          slot.innerHTML = `
+          <img src="${u.avatarUrl}" class="slot-avatar">
+          <span class="slot-name">${u.name} ${isCaptain ? '👑' : ''}</span>
+          <div class="slot-badges">🇧🇷</div>
+        `;
+        } else {
+          slot.className = 'slot empty';
+          slot.innerHTML = `<span>Aguardando jogador...</span>`;
+        }
+      }
+    }
+
+    async function startGame() {
+      const startBtn = document.getElementById('start-btn');
+      startBtn.disabled = true;
+      startBtn.innerText = 'MOVING PLAYERS...';
+
+      const TEAM_A_CHANNEL = '1447412931523379293'; // EQUIPE A
+      const TEAM_B_CHANNEL = '1447412979741233252'; // EQUIPE B
+
+      const assignments = [
+        ...teamA.map(u => ({ userId: u.userId, channelId: TEAM_A_CHANNEL })),
+        ...teamB.map(u => ({ userId: u.userId, channelId: TEAM_B_CHANNEL }))
+      ];
+
+      await movePlayers(assignments);
+
+      startBtn.disabled = false;
+      startBtn.innerText = 'START GAME';
+
+      document.querySelector('.app-container').style.display = 'none';
+      document.getElementById('map-selection').style.display = 'flex';
+
+      // Initialize Veto
+      vetoTurn = 'A';
+      mapsRemaining = 12;
+      updateVetoVisuals();
+    }
+
+    let vetoTurn = 'A';
+    let mapsRemaining = 12;
+
+    function vetoMap(mapElement) {
+      if (mapElement.classList.contains('banned') || mapElement.classList.contains('selected')) return;
+
+      // Ban the map
+      mapElement.classList.add('banned');
+      mapsRemaining--;
+
+      if (mapsRemaining === 1) {
+        // Find the last remaining map
+        const allMaps = document.querySelectorAll('.map-list li');
+        let winner = null;
+        allMaps.forEach(m => {
+          if (!m.classList.contains('banned')) {
+            winner = m;
+          }
+        });
+
+        if (winner) {
+          winner.classList.add('selected');
+          document.getElementById('selected-map').innerText = `MAPA ESCOLHIDO: ${winner.innerText}`;
+          document.querySelector('.overlay h1').innerText = "MAPA DEFINIDO";
+          document.querySelector('.overlay h1').style.color = "#fff";
+        }
+        return;
+      }
+
+      // Switch turn
+      vetoTurn = vetoTurn === 'A' ? 'B' : 'A';
+      updateVetoVisuals();
+    }
+
+    function updateVetoVisuals() {
+      const title = document.querySelector('.overlay h1');
+      if (mapsRemaining > 1) {
+        title.innerText = `VETO DE MAPAS - VEZ DO TIME ${vetoTurn}`;
+        title.style.color = vetoTurn === 'A' ? 'var(--team-a-color)' : 'var(--team-b-color)';
+      }
+    }
+
+    function initApp() {
+      document.getElementById('start-screen').style.display = 'none';
+      document.querySelector('.app-container').style.display = 'flex';
+
+      startTimers();
+      setInterval(fetchUsers, 2000);
+      fetchUsers();
+    }
+
+    // startTimers();
+    // setInterval(fetchUsers, 2000);
+    // fetchUsers();
+  </script>
+
+</body>
+
+</html>
